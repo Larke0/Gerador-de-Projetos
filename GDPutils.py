@@ -3,10 +3,10 @@ import time
 import datetime
 import os
 import pythoncom
-from pyautocad import Autocad, APoint
+from pyautocad import Autocad
+from pybricscad import Bricscad
 from pyautocad.cache import Cached
 import customtkinter as ctk
-
 
 class GDPutils:
 
@@ -70,8 +70,19 @@ class GDPutils:
             self.log_to_file(message)
         except Exception as e:
             print(f"Error logging: {e}")
+    
 
-    def replace_cad_text(self, find_replace_dict):
+
+
+    def replace_cad_text(self, find_replace_dict, CAD):
+        if CAD == "AutoCAD":
+            self.replace_acad_text(find_replace_dict)
+        elif CAD == "BricsCAD":
+            self.replace_bcad_text(find_replace_dict)
+        else:
+            self.log("Versão não implementada")
+
+    def replace_acad_text(self, find_replace_dict):
         """Replace text in AutoCAD drawing."""
         try:
             self.log("Iniciando interface com o AutoCAD...")
@@ -118,7 +129,7 @@ class GDPutils:
             self.log(f"Erro ao substituir texto: {e}")
 
 
-    def replace_cad_text_express_tools(self, find_replace_dict):
+    def replace_acad_text_express_tools(self, find_replace_dict):
         """Replace text in AutoCAD drawing using AutoLISP script."""
         try:
             self.log("Iniciando interface com o AutoCAD...")
@@ -173,4 +184,56 @@ class GDPutils:
             self.log(f"Concluído em {elapsed_time:.2f} segundos. Substituído {replaced_count} ocorrências.")
         except Exception as e:
             print(f"Erro ao substituir texto: {e}")
+            self.log(f"Erro ao substituir texto: {e}")
+
+    def replace_bcad_text(self, find_replace_dict):
+        """Replace text in BricsCAD drawing."""
+        try:
+            self.log("Iniciando interface com o BricsCAD...")
+            pythoncom.CoInitialize()
+            bcad = Bricscad()
+            if bcad.doc is None:
+                raise Exception("Falha ao abrir interface com o BricsCAD, verifique se o BricsCAD está aberto.")
+            self.log("Interface com o BricsCAD iniciada com sucesso.")
+            self.log("Abrindo desenho: " + bcad.doc.Name)
+            self.log("Varrendo códigos...")
+            start_time = time.time()
+            replaced_count = 0
+
+            # Construct a single regular expression pattern
+            pattern = re.compile("|".join(re.escape(k) for k in find_replace_dict.keys()))
+
+            updates = []  # To store updates to be made
+            log_entries = []  # To store log entries to be made
+
+            for text in bcad.iter_objects_fast('Text'):
+                # Use the pattern to find all occurrences of any pattern to replace
+                new_text = pattern.sub(lambda x: find_replace_dict[x.group(0)], text.TextString)
+
+                if new_text != text.TextString:
+                    updates.append((text, new_text))
+                    log_entries.append(f"\nSubstituído\n{text.TextString}\npara \n{new_text}")
+                    replaced_count += 1
+
+            elapsed_time = time.time() - start_time
+            self.log(f"Varredura concluída em {elapsed_time:.2f} segundos. Achado {replaced_count} para substituição.")
+            
+            # Apply all updates
+            self.log("Aplicando atualizações...")
+            for text, new_text in updates:
+                text.TextString = new_text
+            
+
+            
+            # Refresh graphics in BricsCAD
+            bcad.app.Update()  # Example update command, adjust as per BricsCAD API
+
+            # Log all changes
+            for log_entry in log_entries:
+                self.log_to_file(log_entry)
+
+            elapsed_time = time.time() - start_time
+            self.log(f"Concluído em {elapsed_time:.2f} segundos. Substituído {replaced_count} ocorrências.")
+
+        except Exception as e:
             self.log(f"Erro ao substituir texto: {e}")
