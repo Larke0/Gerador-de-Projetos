@@ -79,11 +79,15 @@ class ReplaceValuesApp(ctk.CTk):
         main_label = ctk.CTkLabel(self, text="Gerador de Projetos", image=icon_image, compound='left', font=("Roboto", 24))
         main_label.pack(pady=20, padx=10)
         
-        version_label =  ctk.CTkLabel(self,text="V0.01", font=("Roboto", 10))
+        version_label =  ctk.CTkLabel(self,text="V0.02", font=("Roboto", 10))
         version_label.place(relx=0.99, rely=0.999, anchor='se')
 
         creator_name =  ctk.CTkLabel(self,text="Feito por Lucas Spínola Bertão", font=("Roboto", 10))
         creator_name.place(relx=0.01, rely=0.999, anchor='sw')
+        
+        self.cad_selected = ctk.StringVar()
+        self.cad_selector = ctk.CTkOptionMenu(self, variable=self.cad_selected, anchor="center", values=["AutoCAD", "BricsCAD"], command=self.save_prefs)
+        self.cad_selector.place(relx=0.85, rely=0.87, anchor='sw')
 
         # Left Frame for Inputs
         left_frame = ctk.CTkFrame(self)
@@ -129,7 +133,7 @@ class ReplaceValuesApp(ctk.CTk):
 
         self.replace_button = ctk.CTkButton(left_frame, text="Substituir Valores", command=self.replace_values_thread)
         self.replace_button.grid(row=len(self.entries_info)*2, columnspan=3, pady=20)
-        self.load_default_info()
+        self.load_prefs()
 
 
         #Entries customizadas:
@@ -174,28 +178,49 @@ class ReplaceValuesApp(ctk.CTk):
         self.entries["tp_code"].bind("<KeyRelease>", lambda event: self.update_chTP_code())
         self.entries["ucp_value"].bind("<KeyRelease>", lambda event: self.on_ucp_change())
         self.entries["um_value"].bind("<KeyRelease>", lambda event: self.on_um_change())        
-        self.entries["pj_fname"].bind("<KeyRelease>", lambda event: self.save_pj_info())          
-        self.entries["pj_name"].bind("<KeyRelease>", lambda event: self.save_pj_info())
+        self.entries["pj_fname"].bind("<KeyRelease>", lambda event: self.save_prefs())          
+        self.entries["pj_name"].bind("<KeyRelease>", lambda event: self.save_prefs())
+        
 
 
-    def save_pj_info(self):
-        """Save the values of pj_fname and pj_name to a file."""
+    def save_prefs(self, event = None):
+        """Save program preferences to prefs.txt."""
         pj_fname = self.variables["pj_fname"].get()
         pj_name = self.variables["pj_name"].get()
+        cad_selector_value = self.cad_selector.get()  # Assuming cad_selector is an attribute holding the value
 
-        with open("pj_info.txt", "w") as file:
-            file.write(f"{pj_fname}\n{pj_name}")
+        with open("prefs.txt", "w") as file:
+            file.write(f"Project File Name: {pj_fname}\n")
+            file.write(f"Project Name: {pj_name}\n")
+            file.write(f"CAD Selector Value: {cad_selector_value}\n")
 
-    def load_default_info(self):
+    def load_prefs(self):
+        """Load program preferences from prefs.txt and set default values."""
+        # Set default values
         self.variables["tp_code"].set("81B1")
         self.variables["chTP_code"].set("41B1")
-        """Load the values of pj_fname and pj_name from a file and set the current date."""
-        if os.path.exists("pj_info.txt"):
-            with open("pj_info.txt", "r") as file:
+
+        # Load preferences from prefs.txt
+        cad_selector_value = None  # Initialize with None
+        if os.path.exists("prefs.txt"):
+            with open("prefs.txt", "r") as file:
                 lines = file.readlines()
-                if len(lines) >= 2:
-                    self.variables["pj_fname"].set(lines[0].strip())
-                    self.variables["pj_name"].set(lines[1].strip())
+                for line in lines:
+                    if line.startswith("Project File Name:"):
+                        pj_fname = line.split(":")[1].strip()
+                        self.variables["pj_fname"].set(pj_fname)
+                    elif line.startswith("Project Name:"):
+                        pj_name = line.split(":")[1].strip()
+                        self.variables["pj_name"].set(pj_name)
+                    elif line.startswith("CAD Selector Value:"):
+                        cad_selector_value = line.split(":")[1].strip()
+        
+        # Ensure cad_selector_value is valid
+        if cad_selector_value not in ["AutoCAD", "BricsCAD"]:
+            cad_selector_value = "AutoCAD"
+        
+        # Set cad_selector value
+        self.cad_selector.set(cad_selector_value if cad_selector_value else "AutoCAD")
 
         # Set the current date
         current_date = datetime.now().strftime("%d/%m/%y")
@@ -375,13 +400,12 @@ class ReplaceValuesApp(ctk.CTk):
         "!**DJCA": self.variables['DJCA_number'].get().upper(),
         "X!**CAP": self.variables['BPCA_number'].get().upper(),
         "X!**CAN": self.variables['BNCA_number'].get().upper()
-        
         }
         """Start a new thread to execute the replace_values method."""
         # Disable the replace button
         self.replace_button.configure(state="disabled")
 
-        self.GDPutils.replace_cad_text(find_replace_dict)
+        self.GDPutils.replace_cad_text(find_replace_dict, self.cad_selector.get())
 
         # Enable the replace button again after the operation completes
         self.replace_button.configure(state="normal")
